@@ -34,6 +34,11 @@ export class HttpApi {
             (req, res) => this.getChannels(req, res)
         );
 
+		this.express.get(
+            '/apps/:appId/monitors',
+            (req, res) => this.getMonitors(req, res)
+        );
+
         this.express.get(
             '/apps/:appId/channels/:channelName',
             (req, res) => this.getChannel(req, res)
@@ -146,7 +151,7 @@ export class HttpApi {
      * @param  {any} res
      * @return {boolean}
      */
-    getChannelUsers(req: any, res: any): boolean {
+    getChannelUsers(req: any, res: any): any {
         let channelName = req.params.channelName;
 
         if (!this.channel.isPresence(channelName)) {
@@ -157,15 +162,30 @@ export class HttpApi {
             );
         }
 
-        this.channel.presence.getMembers(channelName).then(members => {
-            let users = [];
+        this.channel.presence.getMembers(channelName)
+			.then(
+				members => {
+					console.log('getChannelUsers', members);
+					let users = [];
 
-            _.uniqBy(members, 'user_id').forEach((member: any) => {
-                users.push({ id: member.user_id, user_info: member.user_info });
-            });
+					_.uniqBy(members, 'user_id').forEach((member: any) => {
+						users.push({ id: member.user_id, user_info: member.user_info });
+					});
 
-            res.json({ users: users });
-        }, error => Log.error(error));
+					res.json({ users: users });
+				},
+				error => Log.error(error)
+			);
+    }
+
+	getMonitors(req: any, res: any): any {
+        this.channel.presence.getMonitors()
+			.then(
+				monitors => {
+					res.json({ monitors });
+				},
+				error => Log.error(error)
+			);
     }
 
     /**

@@ -99,7 +99,7 @@ export class EchoServer {
      * Initialize the class
      */
     init(io: any): Promise<any> {
-        return new Promise((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => {
             this.channel = new Channel(io, this.options);
 
             this.subscribers = [];
@@ -112,7 +112,12 @@ export class EchoServer {
             this.httpApi.init();
 
             this.onConnect();
-            this.listen().then(() => resolve(), err => Log.error(err));
+            this
+				.listen()
+				.then(
+					() => resolve(),
+					err => Log.error(err)
+				);
         });
     }
 
@@ -120,7 +125,7 @@ export class EchoServer {
      * Text shown at startup.
      */
     startup(): void {
-        Log.title(`\nL A R A V E L  E C H O  S E R V E R\n`);
+        Log.title(`\nLARAVEL ECHO SERVER\n`);
         Log.info(`version ${packageFile.version}\n`);
 
         if (this.options.devMode) {
@@ -150,7 +155,7 @@ export class EchoServer {
      * Listen for incoming event from subscibers.
      */
     listen(): Promise<any> {
-        return new Promise((resolve, reject) => {
+        return new Promise<void>((resolve, reject) => {
             let subscribePromises = this.subscribers.map(subscriber => {
                 return subscriber.subscribe((channel, message) => {
                     return this.broadcast(channel, message);
@@ -215,7 +220,10 @@ export class EchoServer {
      * On subscribe to a channel.
      */
     onSubscribe(socket: any): void {
+		// console.log('server.onSubscribe (unkown channel)');
         socket.on('subscribe', data => {
+			// console.log(`server.onSubscribe (${data.channel})`);
+			// if (data.channel && data.channel.startsWith('presence-group')) console.log('server.onSubscribe (group)', data);
             this.channel.join(socket, data);
         });
     }

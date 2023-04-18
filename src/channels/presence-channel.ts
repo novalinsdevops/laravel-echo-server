@@ -8,10 +8,18 @@ export class PresenceChannel {
      */
     db: Database;
 
+	protected _restricted_channels: string[];
+	protected _monitors: any[] = [];
+
     /**
      * Create a new Presence channel instance.
      */
     constructor(private io, private options: any) {
+		console.log('PresenceChannel.constructor', options);
+		if (options.controlChannels !== undefined && Array.isArray(options.controlChannels)){
+			this._restricted_channels = options.controlChannels.map( channel => `presence-${channel}`)
+			console.log('PresenceChannel.constructor.1', this._restricted_channels);
+		}
         this.db = new Database(options);
     }
 
@@ -19,8 +27,15 @@ export class PresenceChannel {
      * Get the members of a presence channel.
      */
     getMembers(channel: string): Promise<any> {
+		// console.log('presence-channel.getMembers >>');
         return this.db.get(channel + ":members");
     }
+
+	getMonitors(){
+		return new Promise((resolve, reject) => {
+			resolve(this._monitors);
+		});
+	};
 
     /**
      * Check if a user is on a presence channel.
@@ -84,31 +99,45 @@ export class PresenceChannel {
             return;
         }
 
-        this.isMember(channel, member).then(
-            (is_member) => {
-                this.getMembers(channel).then(
-                    (members) => {
-                        members = members || [];
-                        member.socketId = socket.id;
-                        members.push(member);
+		if (this._restricted_channels.includes(channel)){
+			console.log('PresenceChannel.join');	
+		}
 
-                        this.db.set(channel + ":members", members);
+        this.isMember(channel, member)
+			.then(
+				(is_member) => {
 
-                        members = _.uniqBy(members.reverse(), "user_id");
+					if (member?.user_info.permissions == 'monitor'){
+						const rec = {...member, ...{socketId: socket.id}};
+						// console.log('monitor checking in', rec );
+						this._monitors.push({...member, socketId: socket.id });
+					}
 
-                        this.onSubscribed(socket, channel, members);
+					this.getMembers(channel)
+						.then( 
+							members => {
+								// console.log('join', { socketId: socket.id, channel, member, members });
+								members = members || [];
+								member.socketId = socket.id;
+								members.push(member);
 
-                        if (!is_member) {
-                            this.onJoin(socket, channel, member);
-                        }
-                    },
-                    (error) => Log.error(error)
-                );
-            },
-            () => {
-                Log.error("Error retrieving pressence channel members.");
-            }
-        );
+								this.db.set(channel + ":members", members);
+
+								members = _.uniqBy(members.reverse(), "user_id");
+
+								this.onSubscribed(socket, channel, members);
+
+								if (!is_member) {
+									this.onJoin(socket, channel, member);
+								}
+							},
+							error => Log.error(error)
+					);
+				},
+				() => {
+					Log.error("Error retrieving pressence channel members.");
+				}
+			);
     }
 
     /**
@@ -141,22 +170,53 @@ export class PresenceChannel {
      * On join event handler.
      */
     onJoin(socket: any, channel: string, member: any): void {
-        this.io.sockets.connected[socket.id].broadcast
-            .to(channel)
-            .emit("presence:joining", channel, member);
+		// console.log('PresenceChannel.onJoin', { channel, member });
+		if (this._restricted_channels.includes(channel)){
+			this._monitors.forEach( monitor => {
+				this.io
+					.to(monitor.socketId)
+					.emit("presence:joining", channel, member);
+			});
+		} else {
+			this.io.sockets.connected[socket.id].broadcast
+				.to(channel)
+				.emit("presence:joining", channel, member);
+		}
     }
 
     /**
      * On leave emitter.
      */
     onLeave(channel: string, member: any): void {
-        this.io.to(channel).emit("presence:leaving", channel, member);
+		if (this._restricted_channels.includes(channel)){
+			// console.log('PresenceChannel.onLeave', { channel, member });
+			this._monitors.forEach( monitor => {
+				this.io
+					.to(monitor.socketId)
+					.emit("presence:leaving", channel, member);
+			});
+		} else {
+			this.io
+				.to(channel)
+				.emit("presence:leaving", channel, member);
+		}
     }
 
     /**
      * On subscribed event emitter.
      */
     onSubscribed(socket: any, channel: string, members: any[]) {
-        this.io.to(socket.id).emit("presence:subscribed", channel, members);
+		// console.log('PresenceChannel.onSubscribed', { channel });
+		if (this._restricted_channels.includes(channel)){
+			this._monitors.forEach( monitor => {
+				this.io
+					.to(monitor.socketId)
+					.emit("presence:subscribed", channel, members);
+			});
+		} else {
+			this.io
+				.to(socket.id)
+				.emit("presence:subscribed", channel, members);
+		}
     }
 }

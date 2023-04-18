@@ -105,27 +105,33 @@ export class Channel {
      * Join private channel, emit data to presence channels.
      */
     joinPrivate(socket: any, data: any): void {
-        this.private.authenticate(socket, data).then(res => {
-            socket.join(data.channel);
+        this.private.authenticate(socket, data)
+			.then(
+				res => {
+					socket.join(data.channel);
 
-            if (this.isPresence(data.channel)) {
-                var member = res.channel_data;
-                try {
-                    member = JSON.parse(res.channel_data);
-                } catch (e) { }
+					if (this.isPresence(data.channel)) {
+						var member = res.channel_data;
+						try {
+							member = JSON.parse(res.channel_data);
+						} catch (e) { }
 
-                this.presence.join(socket, data.channel, member);
-            }
+						if (data.channel && data.channel.startsWith('presence-group')) console.log('MEMBER', member)
+						if (data.extra_data) member.user_info._client_data = data.extra_data;
+						this.presence.join(socket, data.channel, member);
+					}
 
-            this.onJoin(socket, data.channel);
-        }, error => {
-            if (this.options.devMode) {
-                Log.error(error.reason);
-            }
+					this.onJoin(socket, data.channel);
+				},
+				error => {
+					if (this.options.devMode) {
+						Log.error(error.reason);
+					}
 
-            this.io.sockets.to(socket.id)
-                .emit('subscription_error', data.channel, error.status);
-        });
+					this.io.sockets.to(socket.id)
+						.emit('subscription_error', data.channel, error.status);
+				}
+			);
     }
 
     /**
